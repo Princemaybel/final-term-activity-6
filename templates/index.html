@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoTrack Pro | Modern Map & Navigation</title>
+
+    <!-- Google Fonts: Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- Fullscreen Map Container -->
+    <div id="map"></div>
+
+    <!-- Floating Toast Notification -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 3000;">
+        <div id="liveToast" class="toast align-items-center text-white border-0 shadow-lg rounded-4" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body d-flex align-items-center gap-2 px-3 py-2" id="toastMessage">
+                    <i class="bi bi-info-circle-fill"></i>
+                    <span>Notification</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Top-Left Navigation Card (Google Maps Style) -->
+    <div class="floating-panel-container">
+        <!-- Main Floating Glass Card -->
+        <div class="card floating-card border-0 shadow-lg rounded-4 overflow-hidden" id="navigationCard">
+            
+            <!-- Card Header & Search Bar -->
+            <div class="card-header bg-transparent border-0 p-3 pb-2">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="brand-icon-box bg-primary text-white rounded-3 shadow-xs">
+                            <i class="bi bi-compass-fill"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-dark">GeoTrack <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2">Pro</span></h6>
+                            <span class="text-muted" style="font-size: 0.72rem;">Flask REST API Map & Navigation</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-light border-0 rounded-circle icon-btn" id="collapseCardBtn" title="Toggle panel size">
+                        <i class="bi bi-chevron-up" id="collapseIcon"></i>
+                    </button>
+                </div>
+
+                <!-- Search Input Pill with Search Suggestions -->
+                <div class="position-relative">
+                    <div class="search-box-wrapper d-flex align-items-center px-3 py-2 rounded-pill bg-light border shadow-xs">
+                        <i class="bi bi-search text-primary me-2"></i>
+                        <input type="text" id="searchInput" class="form-control form-control-sm border-0 bg-transparent p-0 shadow-none" placeholder="Search address, mall, city, landmark...">
+                        <button id="clearSearchBtn" class="btn btn-sm text-muted p-0 d-none" title="Clear">
+                            <i class="bi bi-x-circle-fill"></i>
+                        </button>
+                        <button id="searchBtn" class="btn btn-primary btn-sm rounded-pill px-3 ms-2 shadow-xs">
+                            Go
+                        </button>
+                    </div>
+
+                    <!-- Autocomplete / Results Dropdown -->
+                    <div id="searchResults" class="search-dropdown-menu list-group shadow-lg border-0 rounded-4 overflow-hidden d-none">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Collapsible Body Content -->
+            <div id="panelBody" class="panel-collapsible-body">
+                
+                <!-- Navigation Tabs: Directions vs Location History -->
+                <ul class="nav nav-pills nav-fill px-3 py-1 border-bottom bg-light-subtle small fw-semibold" id="panelTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active rounded-pill py-1" id="tabDirectionsBtn" data-bs-toggle="pill" data-bs-target="#tabDirections" type="button">
+                            <i class="bi bi-signpost-2-fill me-1"></i>Directions
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link rounded-pill py-1" id="tabHistoryBtn" data-bs-toggle="pill" data-bs-target="#tabHistory" type="button">
+                            <i class="bi bi-clock-history me-1"></i>History <span class="badge bg-secondary-subtle text-secondary rounded-pill ms-1" id="historyCountBadge">0</span>
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab Content Panels -->
+                <div class="tab-content">
+                    
+                    <!-- 1. DIRECTIONS & ROUTING TAB -->
+                    <div class="tab-pane fade show active p-3" id="tabDirections" role="tabpanel">
+                        
+                        <!-- Travel Mode Buttons -->
+                        <div class="d-flex justify-content-center gap-2 mb-3">
+                            <button class="btn btn-sm btn-outline-primary travel-mode-btn active rounded-pill px-3 shadow-xs" data-mode="driving" title="Driving Route">
+                                <i class="bi bi-car-front-fill me-1"></i>Drive
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary travel-mode-btn rounded-pill px-3 shadow-xs" data-mode="walking" title="Walking Route">
+                                <i class="bi bi-person-walking me-1"></i>Walk
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary travel-mode-btn rounded-pill px-3 shadow-xs" data-mode="cycling" title="Cycling Route">
+                                <i class="bi bi-bicycle me-1"></i>Cycle
+                            </button>
+                        </div>
+
+                        <!-- Origin / Destination Inputs with Swap Icon -->
+                        <div class="position-relative route-inputs-card bg-light p-2 rounded-4 border mb-3">
+                            <!-- Start Point -->
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="origin-dot flex-shrink-0" title="Start Point"></span>
+                                <input type="text" id="startPointInput" class="form-control form-control-sm border-0 bg-white rounded-3 shadow-xs" readonly placeholder="Waiting for GPS or choose below...">
+                            </div>
+
+                            <!-- Swap Button -->
+                            <div class="swap-button-wrapper text-end pe-2 my-n1">
+                                <button id="swapRouteBtn" class="btn btn-sm btn-white border rounded-circle shadow-xs icon-btn" title="Swap Start and Destination">
+                                    <i class="bi bi-arrow-down-up text-primary"></i>
+                                </button>
+                            </div>
+
+                            <!-- Destination Point -->
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="dest-pin flex-shrink-0" title="Destination">
+                                    <i class="bi bi-geo-alt-fill text-danger fs-6"></i>
+                                </span>
+                                <input type="text" id="destPointInput" class="form-control form-control-sm border-0 bg-white rounded-3 shadow-xs" readonly placeholder="Search or click on map...">
+                            </div>
+                        </div>
+
+                        <!-- Route Action Buttons -->
+                        <div class="d-flex gap-2 mb-3">
+                            <button id="calcRouteBtn" class="btn btn-primary btn-sm flex-grow-1 py-2 rounded-pill fw-semibold shadow-sm d-flex align-items-center justify-content-center gap-2">
+                                <i class="bi bi-sign-turn-right-fill"></i>
+                                <span>Get Directions</span>
+                            </button>
+                            <button id="clearRouteBtn" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs" title="Clear current route">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+
+                        <!-- Live Route Summary & Turn Instructions (Displays upon calculation) -->
+                        <div id="routeSummaryContainer" class="route-summary-box border-0 rounded-4 p-3 d-none mb-2">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div>
+                                    <span class="text-uppercase text-success small fw-bold tracking-wide">Optimal Route</span>
+                                    <div class="display-6 fw-bold text-dark lh-1 mt-1" id="routeDuration">0 min</div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-success rounded-pill px-3 py-2 fs-6 shadow-xs" id="routeDistance">0 km</span>
+                                    <div class="text-muted small mt-1"><i class="bi bi-lightning-charge-fill text-warning"></i> Fast traffic</div>
+                                </div>
+                            </div>
+
+                            <!-- Turn-by-Turn Collapsible Trigger -->
+                            <button class="btn btn-sm btn-white border w-100 rounded-3 py-2 mt-2 d-flex align-items-center justify-content-between shadow-xs" type="button" data-bs-toggle="collapse" data-bs-target="#turnByTurnCollapse">
+                                <span class="fw-semibold text-dark"><i class="bi bi-list-check me-2 text-primary"></i>Turn-by-Turn Steps</span>
+                                <i class="bi bi-chevron-down text-muted small"></i>
+                            </button>
+
+                            <div class="collapse mt-2" id="turnByTurnCollapse">
+                                <div class="turn-instructions-list bg-white border rounded-3 p-2 small" id="turnInstructions">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- 2. LOCATION HISTORY TAB -->
+                    <div class="tab-pane fade p-3" id="tabHistory" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small fw-bold text-uppercase text-secondary">
+                                <i class="bi bi-pin-map-fill me-1 text-primary"></i>Saved & Tracked Spots
+                            </span>
+                            <div class="d-flex gap-1">
+                                <button id="saveCurrentBtn" class="btn btn-sm btn-outline-primary rounded-pill py-0 px-2" title="Bookmark current coordinates">
+                                    <i class="bi bi-bookmark-plus"></i> Save Pin
+                                </button>
+                                <button id="clearHistoryBtn" class="btn btn-sm btn-outline-danger rounded-pill py-0 px-2" title="Clear all history">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Scrollable Location List -->
+                        <div class="history-list-wrapper border rounded-4 bg-white overflow-hidden shadow-xs">
+                            <ul class="list-group list-group-flush small" id="historyList">
+                                <!-- Populated dynamically from Flask SQLite database -->
+                            </ul>
+                            <div id="historyEmpty" class="text-center py-4 text-muted small d-none">
+                                <i class="bi bi-geo text-secondary fs-3 d-block mb-1"></i>
+                                No saved locations found.
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Top-Right Map Controls: Layer Switcher & Fullscreen -->
+    <div class="floating-controls-top-right d-flex flex-column gap-2">
+        <!-- Map Style / Layer Switcher Dropdown -->
+        <div class="dropdown">
+            <button class="btn btn-white shadow-lg rounded-circle icon-btn border-0" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Change Map Style">
+                <i class="bi bi-layers-fill text-dark fs-5"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 p-2 small map-style-dropdown">
+                <li class="dropdown-header fw-bold text-uppercase text-secondary py-1" style="font-size: 0.7rem;">Map Style</li>
+                <li>
+                    <button class="dropdown-item rounded-3 active map-layer-opt" data-layer="streets">
+                        <i class="bi bi-map-fill me-2 text-primary"></i>Modern Streets (Default)
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item rounded-3 map-layer-opt" data-layer="satellite">
+                        <i class="bi bi-globe-americas me-2 text-success"></i>Satellite Imagery
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item rounded-3 map-layer-opt" data-layer="osm">
+                        <i class="bi bi-signpost-fill me-2 text-info"></i>OpenStreetMap Standard
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item rounded-3 map-layer-opt" data-layer="topo">
+                        <i class="bi bi-compass-fill me-2 text-warning"></i>Topographic Terrain
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Fullscreen Button -->
+        <button id="fullscreenBtn" class="btn btn-white shadow-lg rounded-circle icon-btn border-0" title="Toggle Fullscreen">
+            <i class="bi bi-arrows-fullscreen text-dark"></i>
+        </button>
+    </div>
+
+    <!-- Floating Bottom-Right Controls: GPS Locate & Live Tracking -->
+    <div class="floating-controls-bottom-right d-flex flex-column gap-2 align-items-end">
+        <!-- Live GPS Tracker Toggle FAB -->
+        <button id="liveTrackingBtn" class="btn btn-white shadow-lg rounded-pill px-3 py-2 border-0 d-flex align-items-center gap-2 fw-semibold text-secondary" title="Live GPS continuous tracking">
+            <span class="live-dot-off" id="liveDot"></span>
+            <span id="liveTrackingText" class="small">Live GPS: OFF</span>
+        </button>
+
+        <!-- Locate Me FAB -->
+        <button id="locateMeBtn" class="btn btn-primary shadow-lg rounded-circle icon-fab border-0 d-flex align-items-center justify-content-center" title="Locate Me (Current GPS)">
+            <i class="bi bi-crosshair fs-4"></i>
+        </button>
+    </div>
+
+    <!-- Floating Helper Pill at bottom center -->
+    <div class="position-fixed bottom-0 start-50 translate-middle-x mb-3 z-2 pointer-events-none d-none d-md-block">
+        <div class="floating-tip-pill shadow-lg text-dark bg-white px-3 py-1 rounded-pill small border">
+            <i class="bi bi-cursor-fill text-primary me-1"></i>
+            <span>Click anywhere on the map to set your destination!</span>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet Routing Machine JS -->
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <!-- Client Application Script -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
